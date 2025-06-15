@@ -52,3 +52,60 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+##########################
+# 🔐 보안 관련 파일들 (중요!)
+##########################
+
+# Syncfusion 라이선스 키 파일
+license.config
+License.config
+LICENSE.config
+*.license
+*.lic
+
+# API 키 및 시크릿
+appsettings.secret.json
+appsettings.local.json
+secrets.json
+.env
+.env.local
+.env.production
+.env.development
+
+# 인증서 파일
+*.pfx
+*.p12
+*.key
+*.pem
+*.crt
+*.cer
+
+# 데이터베이스 연결 문자열
+connectionstrings.config
+database.config
+
+# 개인 설정 파일
+personal.config
+user.config
+
+##########################
+# 프로젝트별 추가 설정
+##########################
+
+# 로그 파일
+logs/
+*.log
+log.txt
+
+# 임시 파일
+temp/
+tmp/
+*.tmp
+*.bak
+*.backup
+
+# 출력 폴더 (분할된 PDF 파일들)
+*_분할/
+*_split/
+output/
