@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <StartupObject>PDFSplitterforCopilot.TestWordToPdfLicense</StartupObject>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <Compile Include="TestWordToPdfLicense.cs" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Serilog" Version="4.3.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="Syncfusion.DocIO.Net.Core" Version="29.2.10" />
+    <PackageReference Include="Syncfusion.DocIORenderer.Net.Core" Version="29.2.10" />
+    <PackageReference Include="Syncfusion.Pdf.Net.Core" Version="29.2.10" />
+  </ItemGroup>
+  
+  <!-- 라이선스 파일 자동 복사 설정 -->
+  <ItemGroup>
+    <None Include="license.config" Condition="Exists('license.config')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="WordSample01.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  
+  <!-- 라이선스 파일이 없으면 경고 메시지 출력 -->
+  <Target Name="CheckLicenseConfig" BeforeTargets="Build">
+    <Warning Text="⚠️  license.config 파일이 없습니다. README.md를 참고하여 Syncfusion 라이선스 키를 설정하세요." 
+             Condition="!Exists('license.config')" />
+  </Target>
+</Project>

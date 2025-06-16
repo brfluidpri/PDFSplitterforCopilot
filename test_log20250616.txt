@@ -1,0 +1,4 @@
+2025-06-16 05:56:42.999 +09:00 [INF] license.config 파일에서 Syncfusion 라이선스 키 로딩 완료
+2025-06-16 05:56:45.304 +09:00 [INF] Syncfusion을 사용한 Word→PDF 변환 완료: WordSample01.docx → WordSample01_Test.pdf
+2025-06-16 05:59:27.276 +09:00 [INF] license.config 파일에서 Syncfusion 라이선스 키 로딩 완료
+2025-06-16 05:59:28.145 +09:00 [INF] Syncfusion을 사용한 Word→PDF 변환 완료: WordSample01.docx → WordSample01_Test.pdf

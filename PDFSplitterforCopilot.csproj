@@ -1,0 +1,63 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>asset\icon.ico</ApplicationIcon>
+    <AssemblyTitle>PDF Splitter For Copilot</AssemblyTitle>
+    <AssemblyDescription>PDF 및 Word 파일을 지정된 페이지 단위로 분할하는 프로그램 - Copilot Edition</AssemblyDescription>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
+    <!-- Hot Reload 지원 설정 -->
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>false</UseWindowsForms>
+  </PropertyGroup>
+  
+  <!-- CLI 테스트 파일 제외 -->
+  <ItemGroup>
+    <Compile Remove="TestWordToPdfLicense.cs" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="FluentWPF" Version="0.10.2" />
+    <PackageReference Include="itext7" Version="8.0.4" />
+    <PackageReference Include="itext7.bouncy-castle-adapter" Version="8.0.4" />
+    <PackageReference Include="Microsoft.Office.Interop.Word" Version="15.0.4797.1004" />
+    <PackageReference Include="ModernWpfUI" Version="0.9.6" />
+    <PackageReference Include="Serilog" Version="4.3.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="Syncfusion.DocIO.Net.Core" Version="29.2.10" />
+    <PackageReference Include="Syncfusion.DocIORenderer.Net.Core" Version="29.2.10" />
+    <PackageReference Include="Syncfusion.Pdf.Net.Core" Version="29.2.10" />
+    <PackageReference Include="System.Drawing.Common" Version="9.0.5" />
+  </ItemGroup>
+  
+  <!-- 라이선스 파일 자동 복사 설정 -->
+  <ItemGroup>
+    <!-- license.config 파일이 존재하면 출력 디렉토리로 복사 -->
+    <None Include="license.config" Condition="Exists('license.config')" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 예시 파일은 빌드에 포함하지 않음 -->
+    <None Remove="license.config.example" />
+  </ItemGroup>
+  
+  <!-- 빌드 시 라이선스 키 임베드 (PowerShell 스크립트 사용) -->
+  <Target Name="EmbedLicenseKey" BeforeTargets="CoreCompile">
+    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\EmbedLicense.ps1&quot;" 
+          ContinueOnError="true" 
+          IgnoreExitCode="false" />
+  </Target>
+
+  <!-- 단일 실행파일 배포를 위한 설정 -->
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>embedded</DebugType>
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <TieredCompilation>false</TieredCompilation>
+  </PropertyGroup>
+
+</Project>

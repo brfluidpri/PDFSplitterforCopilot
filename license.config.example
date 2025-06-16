@@ -1,0 +1,17 @@
+# Syncfusion License Configuration Example
+# 
+# 이 파일을 'license.config'로 복사하고 실제 라이선스 키를 입력하세요.
+# 
+# 라이선스 키 획득 방법:
+# 1. 무료 Community License: https://www.syncfusion.com/products/communitylicense
+# 2. 30일 평가판: https://www.syncfusion.com/downloads  
+# 3. 유료 라이선스: https://www.syncfusion.com/sales/products
+#
+# 사용법:
+# 1. 이 파일을 'license.config'로 복사
+# 2. 아래 YOUR_LICENSE_KEY_HERE를 실제 라이선스 키로 교체
+# 3. 저장 후 빌드/실행
+#
+# 주의: license.config 파일은 Git에 커밋되지 않습니다.
+
+YOUR_LICENSE_KEY_HERE

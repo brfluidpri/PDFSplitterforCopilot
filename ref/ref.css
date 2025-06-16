@@ -1,0 +1,38 @@
+/* ref.css: ref.html의 인라인 스타일 외부화 및 Safari 호환성 추가 */
+
+/* 최근 프로젝트 카드 */
+.recent-project-card {
+    margin: 10px 0;
+    padding: 8px;
+    background: white;
+    border-radius: 4px;
+}
+
+/* 진행/완료 작업 숫자 */
+.task-count-blue {
+    font-size: 2em;
+    color: #3498db;
+    margin: 10px 0;
+}
+.task-count-green {
+    font-size: 2em;
+    color: #27ae60;
+    margin: 10px 0;
+}
+
+/* 차트/캘린더 영역 */
+.chart-area, .calendar-area {
+    background: #ecf0f1;
+    height: 80px;
+    border-radius: 4px;
+    margin: 10px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Safari 호환성: backdrop-filter */
+.design2-stat, .design10-metric, .design10-content {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
