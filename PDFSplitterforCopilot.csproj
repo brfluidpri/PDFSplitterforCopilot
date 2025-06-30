@@ -11,6 +11,10 @@
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>false</UseWindowsForms>
+    
+    <!-- Hot Reload 최적화 설정 -->
+    <EnableDevelopmentMode>true</EnableDevelopmentMode>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
   </PropertyGroup>
   
   <!-- CLI 테스트 파일 제외 -->
