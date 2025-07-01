@@ -1191,7 +1191,7 @@ namespace PDFSplitterforCopilot
                 
                 // 처리 완료된 파일의 경우 결과물 폴더 열기 옵션 제공
                 if (fileItem.StatusColor == Brushes.Green && 
-                    (fileItem.StatusMessage.Contains("완료") || fileItem.StatusMessage.Contains("추출됨")))
+                    (fileItem.StatusMessage.Contains("완료") || fileItem.StatusMessage.Contains("추출됨") || fileItem.StatusMessage.Contains("변환 완료")))
                 {
                     message += "\n\n결과물 폴더를 열어보시겠습니까?";
                     var result = MessageBox.Show(message, "상세 상태 정보", 
@@ -1199,7 +1199,20 @@ namespace PDFSplitterforCopilot
                     
                     if (result == MessageBoxResult.Yes)
                     {
-                        OpenOutputFolder(fileItem.FilePath);
+                        // 일괄변환 모드이거나 Word → PDF 변환인 경우와 분할 모드를 구분
+                        bool isWordToPdfConversion = fileItem.StatusMessage.Contains("변환 완료") || 
+                                                   (fileItem.Steps != null && fileItem.Steps.Any(s => s.Name.Contains("PDF 변환") || s.Name.Contains("Word 문서")));
+                        
+                        if (isWordToPdfConversion)
+                        {
+                            // Word → PDF 변환인 경우: 원본 파일과 같은 폴더 열기
+                            OpenFileFolder(fileItem.FilePath);
+                        }
+                        else
+                        {
+                            // PDF 분할인 경우: output_split 폴더 열기
+                            OpenOutputFolder(fileItem.FilePath);
+                        }
                     }
                 }
                 else
@@ -1303,7 +1316,53 @@ namespace PDFSplitterforCopilot
         }
 
         /// <summary>
-        /// 지정된 파일의 결과물 폴더(output_split)를 탐색기로 엽니다.
+        /// 지정된 파일이 있는 폴더를 탐색기로 엽니다. (일괄변환용)
+        /// </summary>
+        /// <param name="filePath">파일 경로</param>
+        private void OpenFileFolder(string filePath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(filePath))
+                {
+                    MessageBox.Show("파일 경로가 유효하지 않습니다.", "오류", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                // 파일의 디렉토리 경로 가져오기
+                string? directoryPath = IOPath.GetDirectoryName(filePath);
+                if (string.IsNullOrEmpty(directoryPath))
+                {
+                    MessageBox.Show("파일의 디렉토리를 찾을 수 없습니다.", "오류", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                
+                LogMessage($"파일 폴더 열기 시도: {directoryPath}");
+
+                if (Directory.Exists(directoryPath))
+                {
+                    // 폴더가 존재하면 탐색기로 열기
+                    System.Diagnostics.Process.Start("explorer.exe", directoryPath);
+                    LogMessage($"파일 폴더 열기 성공: {directoryPath}");
+                }
+                else
+                {
+                    // 폴더가 없으면 안내 메시지
+                    MessageBox.Show($"폴더를 찾을 수 없습니다.\n\n경로: {directoryPath}", 
+                        "폴더 없음", MessageBoxButton.OK, MessageBoxImage.Information);
+                    LogMessage($"폴더가 존재하지 않음: {directoryPath}", level: "WARN");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogMessage($"파일 폴더 열기 오류: {filePath}", ex, "ERROR");
+                MessageBox.Show($"폴더를 여는 중 오류가 발생했습니다:\n{ex.Message}", 
+                    "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// 지정된 파일의 결과물 폴더(output_split)를 탐색기로 엽니다. (PDF 분할용)
         /// </summary>
         /// <param name="originalFilePath">원본 파일 경로</param>
         private void OpenOutputFolder(string originalFilePath)
@@ -1595,15 +1654,30 @@ namespace PDFSplitterforCopilot
                             // Word를 PDF로 변환
                             SyncfusionPdf pdfDocument = renderer.ConvertToPDF(wordDocument);
 
-                            // 출력 파일 경로 생성
+                            // 출력 파일 경로 생성 (Word 파일과 같은 폴더, 같은 이름으로 PDF 확장자)
                             string? directoryPath = IOPath.GetDirectoryName(fileItem.FullPath);
                             if (string.IsNullOrEmpty(directoryPath))
                             {
                                 directoryPath = IOPath.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "";
                             }
                             
-                            string outputPath = IOPath.Combine(directoryPath,
-                                IOPath.GetFileNameWithoutExtension(fileItem.FileName) + "_converted.pdf");
+                            // 원본 파일명에서 확장자만 .pdf로 변경
+                            string baseFileName = IOPath.GetFileNameWithoutExtension(fileItem.FileName);
+                            string desiredPath = IOPath.Combine(directoryPath, baseFileName + ".pdf");
+                            
+                            LogMessage($"Word → PDF 변환: 원본={fileItem.FullPath}, 목표={desiredPath}");
+                            
+                            // 중복 파일명 처리 - 파일이 존재하면 (1), (2) 등을 붙임
+                            string outputPath = GetUniqueFilePath(desiredPath);
+                            
+                            if (outputPath != desiredPath)
+                            {
+                                LogMessage($"중복 파일명으로 인한 경로 변경: {IOPath.GetFileName(desiredPath)} → {IOPath.GetFileName(outputPath)}");
+                            }
+
+                            // 변환된 PDF의 페이지 수 가져오기
+                            int totalPages = pdfDocument.Pages.Count;
+                            LogMessage($"변환된 PDF 페이지 수: {totalPages}");
 
                             // PDF 저장
                             using (FileStream outputStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write))
@@ -1628,6 +1702,8 @@ namespace PDFSplitterforCopilot
                                 fileItem.Steps[3].Message = "변환 작업 완료";
                                 fileItem.StatusColor = Brushes.Green;
                                 fileItem.StatusMessage = "변환 완료";
+                                // 페이지 수 업데이트
+                                fileItem.PageCount = totalPages.ToString();
                             });
                         }
                     }
@@ -1651,6 +1727,36 @@ namespace PDFSplitterforCopilot
                     throw; // 예외를 다시 던져서 상위에서 처리하도록 함
                 }
             });
+        }
+
+        /// <summary>
+        /// 중복되지 않는 파일 경로를 생성합니다. 파일이 이미 존재하면 (1), (2) 등을 붙입니다.
+        /// </summary>
+        /// <param name="originalPath">원본 파일 경로</param>
+        /// <returns>중복되지 않는 파일 경로</returns>
+        private string GetUniqueFilePath(string originalPath)
+        {
+            if (!File.Exists(originalPath))
+            {
+                return originalPath;
+            }
+
+            string directory = IOPath.GetDirectoryName(originalPath) ?? "";
+            string fileNameWithoutExtension = IOPath.GetFileNameWithoutExtension(originalPath);
+            string extension = IOPath.GetExtension(originalPath);
+
+            int counter = 1;
+            string newPath;
+
+            do
+            {
+                string newFileName = $"{fileNameWithoutExtension}({counter}){extension}";
+                newPath = IOPath.Combine(directory, newFileName);
+                counter++;
+            }
+            while (File.Exists(newPath));
+
+            return newPath;
         }
     }
 }
