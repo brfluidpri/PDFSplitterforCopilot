@@ -29,6 +29,10 @@ namespace PDFSplitterforCopilot
 
         public string FileName { get => _fileName; set { _fileName = value; OnPropertyChanged(nameof(FileName)); } }
         public string FilePath { get => _filePath; set { _filePath = value; OnPropertyChanged(nameof(FilePath)); } }
+        
+        // FullPath 속성 추가 - FilePath가 이미 전체 경로이므로 그대로 반환
+        public string FullPath => _filePath;
+        
         public string PageCount { get => _pageCount; set { _pageCount = value; OnPropertyChanged(nameof(PageCount)); } }
         public Brush StatusColor { get => _statusColor; set { _statusColor = value; OnPropertyChanged(nameof(StatusColor)); } }
         public string StatusMessage { get => _statusMessage; set { _statusMessage = value; OnPropertyChanged(nameof(StatusMessage)); } }

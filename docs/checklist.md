@@ -91,6 +91,13 @@
 - [x] 버튼 테마 색상을 #00B9BB로 변경 (테마 색상 적용)
 - [x] 진행상황 격자 클릭 시 "_output" 폴더 열기 기능 구현
 - [x] 선택 삭제 기능 개선 (체크된 항목만 삭제, 확인 다이얼로그 추가)
+- [x] **일괄 변환 기능 구현 (Word → PDF 모든 페이지 변환)**
+- [x] **헤더에 "📄→📄 일괄변환" 체크박스 추가**
+- [x] **일괄 변환 모드에서 변환 모드 강제 설정 및 페이지 수 입력 비활성화**
+- [x] **일괄 변환 모드에서 모드 토글 버튼 비활성화**
+- [x] **ProcessBatchConvertAsync 및 ProcessWordToPdfAsync 메서드 구현**
+- [x] **FileItem에 FullPath 속성 추가**
+- [x] **using 충돌 해결 (IOPath, SyncfusionPdf 별칭 사용)**
 
 ### 드래그드롭 파일 필터링 기능 완료 ✅
 - [x] PDF/Word 파일만 등록하도록 필터링 구현 (.pdf, .doc, .docx)

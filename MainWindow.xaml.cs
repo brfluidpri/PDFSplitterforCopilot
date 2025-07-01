@@ -17,6 +17,10 @@ using Syncfusion.DocIO.DLS;
 using Syncfusion.DocIORenderer;
 using Syncfusion.Pdf;
 
+// Alias for ambiguous types
+using IOPath = System.IO.Path;
+using SyncfusionPdf = Syncfusion.Pdf.PdfDocument;
+
 namespace PDFSplitterforCopilot
 {
     public partial class MainWindow : System.Windows.Window, INotifyPropertyChanged
@@ -26,6 +30,9 @@ namespace PDFSplitterforCopilot
         // 모드별 페이지 수 기본값 저장
         private int _splitModePageCount = 10;  // 분할 모드 기본값
         private int _convertModePageCount = 1; // 변환 모드 기본값
+        
+        // 일괄 변환 모드 상태
+        private bool _isBatchConvertMode = false;
 
         public bool HasFiles => fileItems.Count > 0;
         public bool NoFiles => fileItems.Count == 0;
@@ -99,16 +106,12 @@ namespace PDFSplitterforCopilot
         }
 
         /// <summary>
-        /// 페이지 수 텍스트 변경 이벤트 핸들러
+        /// 페이지 수 텍스트 입력 완료 후 검증 (포커스를 잃었을 때)
         /// </summary>
-        private void NumPageCount_TextChanged(object sender, TextChangedEventArgs e)
+        private void NumPageCount_LostFocus(object sender, RoutedEventArgs e)
         {
             if (sender is TextBox textBox)
             {
-                // 이벤트 핸들러 재귀 호출 방지를 위한 플래그
-                if (textBox.Tag as string == "updating")
-                    return;
-
                 string originalText = textBox.Text;
                 string newText = originalText;
 
@@ -138,10 +141,8 @@ namespace PDFSplitterforCopilot
                 // 텍스트가 변경된 경우에만 업데이트
                 if (newText != originalText)
                 {
-                    textBox.Tag = "updating"; // 재귀 호출 방지 플래그 설정
                     textBox.Text = newText;
-                    textBox.SelectionStart = textBox.Text.Length;
-                    textBox.Tag = null; // 플래그 해제
+                    // LostFocus 이벤트이므로 커서 위치 설정 불필요
                 }
             }
         }
@@ -335,6 +336,13 @@ namespace PDFSplitterforCopilot
             });        }
           public async void BtnProcess_Click(object sender, RoutedEventArgs e)
         {
+            // 일괄 변환 모드 체크
+            if (_isBatchConvertMode)
+            {
+                await ProcessBatchConvertAsync();
+                return;
+            }
+
             int pageSize = GetCurrentPageCount();
             if (pageSize <= 0)
             {
@@ -1341,6 +1349,308 @@ namespace PDFSplitterforCopilot
                 MessageBox.Show($"결과물 폴더를 여는 중 오류가 발생했습니다:\n{ex.Message}", 
                     "오류", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        /// <summary>
+        /// 일괄 변환 모드 체크박스 체크 이벤트
+        /// </summary>
+        private void CbBatchConvert_Checked(object sender, RoutedEventArgs e)
+        {
+            _isBatchConvertMode = true;
+            
+            // 변환 모드로 토글
+            tbModeSwitch.IsChecked = true;
+            
+            // 모드 토글 버튼 비활성화 (일괄 변환 모드에서는 변환 모드 고정)
+            tbModeSwitch.IsEnabled = false;
+            
+            // 페이지 수 입력 비활성화
+            numPageCount.IsEnabled = false;
+            numPageCount.Text = "전체";
+            
+            // 실행 버튼 텍스트 업데이트
+            btnProcess.Content = "▶ 일괄 변환 실행";
+        }
+
+        /// <summary>
+        /// 일괄 변환 모드 체크박스 해제 이벤트
+        /// </summary>
+        private void CbBatchConvert_Unchecked(object sender, RoutedEventArgs e)
+        {
+            _isBatchConvertMode = false;
+            
+            // 모드 토글 버튼 활성화
+            tbModeSwitch.IsEnabled = true;
+            
+            // 페이지 수 입력 활성화
+            numPageCount.IsEnabled = true;
+            
+            // 기존 모드 복원
+            RestoreModePageCount();
+            
+            // 실행 버튼 텍스트 업데이트
+            UpdateProcessButtonText();
+        }
+
+        /// <summary>
+        /// 일괄 변환 모드에서 Word 파일을 PDF로 변환합니다.
+        /// </summary>
+        private async Task ProcessBatchConvertAsync()
+        {
+            // 체크된 파일만 필터링
+            var selectedFiles = fileItems.Where(f => f.IsSelected).ToList();
+            if (!selectedFiles.Any())
+            {
+                MessageBox.Show("변환할 파일을 선택해주세요.", "알림");
+                return;
+            }
+
+            // Word 파일만 필터링
+            var wordFiles = selectedFiles.Where(f => 
+                f.FileName.EndsWith(".docx", StringComparison.OrdinalIgnoreCase) ||
+                f.FileName.EndsWith(".doc", StringComparison.OrdinalIgnoreCase)).ToList();
+
+            if (!wordFiles.Any())
+            {
+                MessageBox.Show("변환할 Word 파일(.doc, .docx)이 선택되지 않았습니다.", "알림");
+                return;
+            }
+
+            // 비 Word 파일이 포함된 경우 경고
+            var nonWordFiles = selectedFiles.Except(wordFiles).ToList();
+            if (nonWordFiles.Any())
+            {
+                var result = MessageBox.Show(
+                    $"선택된 파일 중 {nonWordFiles.Count}개는 Word 파일이 아니므로 변환할 수 없습니다.\n\n" +
+                    $"Word 파일 {wordFiles.Count}개만 PDF로 변환하시겠습니까?",
+                    "일괄 변환 확인",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.No)
+                {
+                    return;
+                }
+            }
+
+            // 최종 확인
+            var confirmResult = MessageBox.Show(
+                $"총 {wordFiles.Count}개의 Word 파일을 PDF로 변환하시겠습니까?\n\n" +
+                "모든 페이지가 변환됩니다.",
+                "일괄 변환 확인",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (confirmResult != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            progressContainer.Visibility = Visibility.Visible;
+            progressBar.Maximum = wordFiles.Count;
+            progressBar.Value = 0;
+
+            btnProcess.IsEnabled = false;
+
+            try
+            {
+                foreach (var fileItem in wordFiles)
+                {
+                    txtStatus.Text = $"변환 중: {fileItem.FileName}";
+
+                    try
+                    {
+                        await ProcessWordToPdfAsync(fileItem);
+                        LogMessage($"Word → PDF 변환 완료: {fileItem.FileName}");
+                    }
+                    catch (Exception fileEx)
+                    {
+                        LogMessage($"Word → PDF 변환 실패: {fileItem.FileName}", fileEx, "ERROR");
+
+                        // 개별 파일 처리 실패 시 상태 업데이트하고 계속 진행
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            fileItem.StatusColor = Brushes.Red;
+                            fileItem.StatusMessage = $"변환 실패: {fileEx.Message}";
+                            if (fileItem.Steps != null && fileItem.Steps.Any())
+                            {
+                                var lastStep = fileItem.Steps.Last();
+                                lastStep.Status = StepStatus.Error;
+                                lastStep.Message = $"오류: {fileEx.Message}";
+                            }
+                        });
+
+                        // 사용자에게 개별 파일 오류 알림
+                        var continueResult = MessageBox.Show(
+                            $"파일 '{fileItem.FileName}' 변환 중 오류가 발생했습니다:\n\n{fileEx.Message}\n\n다음 파일을 계속 처리하시겠습니까?",
+                            "파일 변환 오류",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Warning);
+
+                        if (continueResult == MessageBoxResult.No)
+                        {
+                            break; // 사용자가 중단을 선택하면 루프 종료
+                        }
+                    }
+
+                    progressBar.Value++;
+                }
+
+                txtStatus.Text = "일괄 변환 완료!";
+                MessageBox.Show(
+                    $"일괄 변환 작업이 완료되었습니다.\n총 {wordFiles.Count}개의 Word 파일이 PDF로 변환되었습니다.",
+                    "완료");
+            }
+            catch (Exception ex)
+            {
+                string detailedErrorMessage = $"일괄 변환 중 오류가 발생했습니다:\n{ex.GetType().FullName}: {ex.Message}\n\nStack Trace:\n{ex.StackTrace}";
+                MessageBox.Show(detailedErrorMessage, "오류 상세 정보");
+                txtStatus.Text = "일괄 변환 중 오류 발생";
+            }
+            finally
+            {
+                progressContainer.Visibility = Visibility.Collapsed;
+                btnProcess.IsEnabled = true;
+            }
+        }
+
+        /// <summary>
+        /// Word 파일을 PDF로 변환하는 메서드
+        /// </summary>
+        private async Task ProcessWordToPdfAsync(FileItem fileItem)
+        {
+            // 고정된 4단계 프로세스
+            int totalSteps = 4;
+
+            // Initialize progress tracking
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                fileItem.TotalSteps = totalSteps;
+                fileItem.CurrentStep = 0;
+                fileItem.StepMessage = "Word → PDF 변환 준비 중...";
+
+                // Initialize steps collection with 4 fixed steps
+                fileItem.Steps.Clear();
+                string[] stepNames = { "Word 문서 읽기", "PDF 변환 준비", "PDF 생성", "완료" };
+                for (int i = 0; i < totalSteps; i++)
+                {
+                    fileItem.Steps.Add(new StepItem
+                    {
+                        Name = stepNames[i],
+                        Status = StepStatus.Pending,
+                        Message = "대기 중..."
+                    });
+                }
+            });
+
+            await Task.Run(() =>
+            {
+                try
+                {
+                    // Step 1: Word 문서 읽기
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        fileItem.CurrentStep = 1;
+                        fileItem.StepMessage = "Word 문서를 읽는 중...";
+                        fileItem.Steps[0].Status = StepStatus.InProgress;
+                        fileItem.Steps[0].Message = "Word 문서 로딩 중...";
+                    });
+
+                    // Word 문서 로드
+                    using (WordDocument wordDocument = new WordDocument(fileItem.FullPath))
+                    {
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            fileItem.Steps[0].Status = StepStatus.Completed;
+                            fileItem.Steps[0].Message = "Word 문서 로딩 완료";
+                        });
+
+                        // Step 2: PDF 변환 준비
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            fileItem.CurrentStep = 2;
+                            fileItem.StepMessage = "PDF 변환 준비 중...";
+                            fileItem.Steps[1].Status = StepStatus.InProgress;
+                            fileItem.Steps[1].Message = "PDF 렌더러 초기화 중...";
+                        });
+
+                        // DocIORenderer 생성
+                        using (DocIORenderer renderer = new DocIORenderer())
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                fileItem.Steps[1].Status = StepStatus.Completed;
+                                fileItem.Steps[1].Message = "PDF 렌더러 준비 완료";
+                            });
+
+                            // Step 3: PDF 생성
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                fileItem.CurrentStep = 3;
+                                fileItem.StepMessage = "PDF 파일 생성 중...";
+                                fileItem.Steps[2].Status = StepStatus.InProgress;
+                                fileItem.Steps[2].Message = "PDF 변환 진행 중...";
+                            });
+
+                            // Word를 PDF로 변환
+                            SyncfusionPdf pdfDocument = renderer.ConvertToPDF(wordDocument);
+
+                            // 출력 파일 경로 생성
+                            string? directoryPath = IOPath.GetDirectoryName(fileItem.FullPath);
+                            if (string.IsNullOrEmpty(directoryPath))
+                            {
+                                directoryPath = IOPath.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "";
+                            }
+                            
+                            string outputPath = IOPath.Combine(directoryPath,
+                                IOPath.GetFileNameWithoutExtension(fileItem.FileName) + "_converted.pdf");
+
+                            // PDF 저장
+                            using (FileStream outputStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write))
+                            {
+                                pdfDocument.Save(outputStream);
+                            }
+
+                            pdfDocument.Close(true);
+
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                fileItem.Steps[2].Status = StepStatus.Completed;
+                                fileItem.Steps[2].Message = $"PDF 생성 완료: {IOPath.GetFileName(outputPath)}";
+                            });
+
+                            // Step 4: 완료
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                fileItem.CurrentStep = 4;
+                                fileItem.StepMessage = "Word → PDF 변환 완료!";
+                                fileItem.Steps[3].Status = StepStatus.Completed;
+                                fileItem.Steps[3].Message = "변환 작업 완료";
+                                fileItem.StatusColor = Brushes.Green;
+                                fileItem.StatusMessage = "변환 완료";
+                            });
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        // 오류 발생한 단계 표시
+                        if (fileItem.CurrentStep > 0 && fileItem.CurrentStep <= fileItem.Steps.Count)
+                        {
+                            fileItem.Steps[fileItem.CurrentStep - 1].Status = StepStatus.Error;
+                            fileItem.Steps[fileItem.CurrentStep - 1].Message = $"오류: {ex.Message}";
+                        }
+
+                        fileItem.StatusColor = Brushes.Red;
+                        fileItem.StatusMessage = $"변환 실패: {ex.Message}";
+                        fileItem.StepMessage = "변환 실패";
+                    });
+
+                    throw; // 예외를 다시 던져서 상위에서 처리하도록 함
+                }
+            });
         }
     }
 }
