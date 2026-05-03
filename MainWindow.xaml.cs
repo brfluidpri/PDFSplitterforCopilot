@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -28,11 +30,18 @@ namespace PDFSplitterforCopilot
         private ObservableCollection<FileItem> fileItems = new ObservableCollection<FileItem>();
         
         // 모드별 페이지 수 기본값 저장
+        private const int MinPageCount = 1;
+        private const int MaxPageCount = 50;
+        private const int MinContextOverlapPages = 0;
+        private const int MaxContextOverlapPages = 2;
+
         private int _splitModePageCount = 10;  // 분할 모드 기본값
         private int _convertModePageCount = 1; // 변환 모드 기본값
         
         // 일괄 변환 모드 상태
         private bool _isBatchConvertMode = false;
+        private int _lastOperationIndex = 0;
+        private CancellationTokenSource? _processingCancellation;
 
         public bool HasFiles => fileItems.Count > 0;
         public bool NoFiles => fileItems.Count == 0;
@@ -80,8 +89,11 @@ namespace PDFSplitterforCopilot
         private void InitializeModeSettings()
         {
             // 분할 모드를 기본값으로 설정
-            tbModeSwitch.IsChecked = false;
+            cbOperation.SelectedIndex = 0;
+            _lastOperationIndex = 0;
+            _isBatchConvertMode = false;
             numPageCount.Text = _splitModePageCount.ToString();
+            ApplyOperationUiState();
             
             // 실행 버튼 텍스트 업데이트
             UpdateProcessButtonText();
@@ -92,8 +104,98 @@ namespace PDFSplitterforCopilot
         /// </summary>
         private void UpdateProcessButtonText()
         {
-            bool isConvertMode = tbModeSwitch.IsChecked == true;
-            btnProcess.Content = isConvertMode ? "▶ 변환 실행" : "▶ 분할 실행";
+            if (IsBatchConvertOperation())
+            {
+                btnProcess.Content = "Run batch conversion";
+                return;
+            }
+
+            btnProcess.Content = IsConvertOperation()
+                ? "Run conversion"
+                : IsContextSplitMode()
+                    ? "Run context split"
+                    : "Run split";
+        }
+
+        private bool IsConvertOperation()
+        {
+            return cbOperation?.SelectedIndex == 1;
+        }
+
+        private bool IsBatchConvertOperation()
+        {
+            return cbOperation?.SelectedIndex == 2;
+        }
+
+        private void CbOperation_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (numPageCount == null || btnProcess == null)
+            {
+                return;
+            }
+
+            SavePageCountForOperation(_lastOperationIndex);
+            _lastOperationIndex = cbOperation.SelectedIndex;
+            _isBatchConvertMode = cbOperation.SelectedIndex == 2;
+            RestoreModePageCount();
+            ApplyOperationUiState();
+            UpdateProcessButtonText();
+        }
+
+        private void ApplyOperationUiState()
+        {
+            bool isBatchConvert = IsBatchConvertOperation();
+            bool isConvert = IsConvertOperation();
+            bool isContextSplit = !isConvert && !isBatchConvert && IsContextSplitMode();
+
+            cbSplitMode.IsEnabled = !isConvert && !isBatchConvert;
+            numPageCount.IsEnabled = !isBatchConvert;
+            cbGenerateRagJsonl.IsEnabled = !isBatchConvert;
+            txtOverlapLabel.Visibility = isContextSplit ? Visibility.Visible : Visibility.Collapsed;
+            numContextOverlap.Visibility = isContextSplit ? Visibility.Visible : Visibility.Collapsed;
+            txtOverlapHint.Visibility = isContextSplit ? Visibility.Visible : Visibility.Collapsed;
+            numContextOverlap.IsEnabled = isContextSplit;
+
+            if (isBatchConvert)
+            {
+                numPageCount.Text = "All";
+            }
+
+            if (txtWorkflowHint != null)
+            {
+                txtWorkflowHint.Text = isBatchConvert
+                    ? "Convert every selected Word file to PDF."
+                    : isConvert
+                        ? "Convert Word files, or extract the first pages from PDFs."
+                        : isContextSplit
+                            ? "Use the LLM to propose context-aware page ranges before creating files."
+                            : "Split PDF files by a fixed page count.";
+            }
+
+            if (txtPagesLabel != null)
+            {
+                txtPagesLabel.Text = isContextSplit ? "Target" : "Pages";
+            }
+
+            if (txtPageHint != null)
+            {
+                txtPageHint.Text = isBatchConvert
+                    ? "All pages are converted."
+                    : isConvert
+                        ? "Pages to extract from each file."
+                        : isContextSplit
+                            ? "Target pages per suggested part. Overlap duplicates boundary pages in adjacent outputs."
+                            : "Pages per output PDF.";
+            }
+        }
+
+        private void CbSplitMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (btnProcess != null)
+            {
+                ApplyOperationUiState();
+                UpdateProcessButtonText();
+            }
         }
 
         /// <summary>
@@ -118,24 +220,24 @@ namespace PDFSplitterforCopilot
                 // 빈 문자열이거나 공백만 있는 경우
                 if (string.IsNullOrWhiteSpace(originalText))
                 {
-                    newText = "1";
+                    newText = MinPageCount.ToString();
                 }
                 else if (int.TryParse(originalText, out int value))
                 {
                     // 범위 체크 (1-50)
-                    if (value < 1)
+                    if (value < MinPageCount)
                     {
-                        newText = "1";
+                        newText = MinPageCount.ToString();
                     }
-                    else if (value > 50)
+                    else if (value > MaxPageCount)
                     {
-                        newText = "50";
+                        newText = MaxPageCount.ToString();
                     }
                 }
                 else
                 {
                     // 숫자가 아닌 경우 1로 설정
-                    newText = "1";
+                    newText = MinPageCount.ToString();
                 }
 
                 // 텍스트가 변경된 경우에만 업데이트
@@ -147,16 +249,94 @@ namespace PDFSplitterforCopilot
             }
         }
 
+        private void NumContextOverlap_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)
+        {
+            e.Handled = !System.Text.RegularExpressions.Regex.IsMatch(e.Text, @"^[0-9]+$");
+        }
+
+        private void NumContextOverlap_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (sender is TextBox textBox)
+            {
+                textBox.Text = GetCurrentContextOverlapPages().ToString();
+            }
+        }
+
+        private List<string> SplitPdfFile(string pdfPath, IReadOnlyList<ContextSplitRange> ranges, FileItem fileItem, int totalPages, bool generateRagJsonl)
+        {
+            var outputPaths = new List<string>();
+            using (var reader = new PdfReader(pdfPath))
+            using (var pdfDoc = new iText.Kernel.Pdf.PdfDocument(reader))
+            {
+                string outputDir = OutputFileService.GetOutputDirectory(pdfPath);
+
+                if (!Directory.Exists(outputDir))
+                {
+                    Directory.CreateDirectory(outputDir);
+                }
+
+                foreach (var range in ranges)
+                {
+                    int includedStartPage = range.IncludedStartPage > 0 ? range.IncludedStartPage : range.StartPage;
+                    int includedEndPage = range.IncludedEndPage > 0 ? range.IncludedEndPage : range.EndPage;
+
+                    if (range.StartPage < 1 || range.EndPage > totalPages || range.StartPage > range.EndPage)
+                    {
+                        throw new InvalidOperationException($"Invalid context split range: {range.StartPage}-{range.EndPage}.");
+                    }
+
+                    if (includedStartPage < 1 || includedEndPage > totalPages || includedStartPage > includedEndPage)
+                    {
+                        throw new InvalidOperationException($"Invalid included context split range: {includedStartPage}-{includedEndPage}.");
+                    }
+
+                    string outputFilePath = OutputFileService.GetContextSplitOutputPath(pdfPath, range);
+
+                    using (var writer = new iText.Kernel.Pdf.PdfWriter(outputFilePath))
+                    using (var newPdfDoc = new iText.Kernel.Pdf.PdfDocument(writer))
+                    {
+                        pdfDoc.CopyPagesTo(includedStartPage, includedEndPage, newPdfDoc);
+                    }
+
+                    outputPaths.Add(outputFilePath);
+                }
+
+                if (generateRagJsonl)
+                {
+                    string chunkOutputPath = RagChunkExportService.ExportPdfChunks(pdfPath, outputDir);
+                    LogMessage($"RAG chunk JSONL generated: {chunkOutputPath}");
+                    outputPaths.Add(chunkOutputPath);
+                }
+            }
+
+            return outputPaths;
+        }
+
         /// <summary>
         /// 현재 페이지 수 값을 가져옵니다.
         /// </summary>
         private int GetCurrentPageCount()
         {
-            if (int.TryParse(numPageCount.Text, out int value) && value >= 1 && value <= 50)
+            if (int.TryParse(numPageCount.Text, out int value) && value >= MinPageCount && value <= MaxPageCount)
             {
                 return value;
             }
-            return 1; // 기본값
+            return MinPageCount; // 기본값
+        }
+
+        private int GetCurrentContextOverlapPages()
+        {
+            if (int.TryParse(numContextOverlap.Text, out int value))
+            {
+                return Math.Clamp(value, MinContextOverlapPages, MaxContextOverlapPages);
+            }
+
+            return MinContextOverlapPages;
+        }
+
+        private bool IsContextSplitMode()
+        {
+            return cbSplitMode.SelectedIndex == 1;
         }
 
         private void CheckBox_Checked(object sender, RoutedEventArgs e)
@@ -334,10 +514,10 @@ namespace PDFSplitterforCopilot
                     });
                 }
             });        }
-          public async void BtnProcess_Click(object sender, RoutedEventArgs e)
+        public async void BtnProcess_Click(object sender, RoutedEventArgs e)
         {
             // 일괄 변환 모드 체크
-            if (_isBatchConvertMode)
+            if (IsBatchConvertOperation())
             {
                 await ProcessBatchConvertAsync();
                 return;
@@ -351,10 +531,24 @@ namespace PDFSplitterforCopilot
             }
 
             // 모드 확인 (분할 또는 변환) - 토글 버튼 기반
-            bool isConvertMode = tbModeSwitch.IsChecked == true;
+            bool isConvertMode = IsConvertOperation();
             
             // 체크된 파일만 필터링
-            var selectedFiles = fileItems.Where(f => f.IsSelected).ToList();
+            bool useContextSplit = !isConvertMode && IsContextSplitMode();
+            int contextOverlapPages = useContextSplit ? GetCurrentContextOverlapPages() : 0;
+            bool generateRagJsonl = cbGenerateRagJsonl.IsChecked == true;
+            if (isConvertMode && IsContextSplitMode())
+            {
+                MessageBox.Show("Context Split (LLM) is available only in split mode. Switch the mode toggle to split or choose Fixed pages.", "Context Split");
+                return;
+            }
+
+            if (useContextSplit && !EnsureOpenAISettings())
+            {
+                return;
+            }
+
+            var selectedFiles = GetSelectedFiles();
             if (!selectedFiles.Any())
             {
                 MessageBox.Show("처리할 파일을 선택해주세요.", "알림");
@@ -362,10 +556,10 @@ namespace PDFSplitterforCopilot
             }
 
             // 선택된 파일 중 유효한 파일만 필터링 (Orange는 Word 파일로 변환 가능한 상태)
-            var validFiles = selectedFiles.Where(f => f.StatusColor == Brushes.Green || f.StatusColor == Brushes.Orange).ToList();
+            var validFiles = GetProcessableFiles(selectedFiles);
             
             // 처리 불가능한 파일들 확인 (Red 상태)
-            var invalidFiles = selectedFiles.Where(f => f.StatusColor == Brushes.Red).ToList();
+            var invalidFiles = GetInvalidFiles(selectedFiles, validFiles);
             
             if (invalidFiles.Any())
             {
@@ -395,6 +589,11 @@ namespace PDFSplitterforCopilot
                 $"각 파일당 1~{pageSize}페이지 추출" : 
                 $"분할 페이지 수: {pageSize}페이지";
                 
+            if (useContextSplit)
+            {
+                detailText = $"Context Split (LLM): target about {pageSize} pages per part, boundary overlap {contextOverlapPages} page(s). Files are created only after preview confirmation.";
+            }
+
             var confirmResult = MessageBox.Show(
                 $"총 {validFiles.Count}개의 파일을 {modeText}하시겠습니까?\n\n{detailText}", 
                 $"{modeText} 확인", 
@@ -406,27 +605,30 @@ namespace PDFSplitterforCopilot
                 return;
             }
 
-            progressContainer.Visibility = Visibility.Visible;
-            progressBar.Maximum = validFiles.Count;
-            progressBar.Value = 0;
-
-            btnProcess.IsEnabled = false;
+            _processingCancellation = new CancellationTokenSource();
+            SetProcessingUiState(validFiles.Count, true);
             
             try
             {
                 foreach (var fileItem in validFiles)
                 {
+                    if (_processingCancellation.IsCancellationRequested)
+                    {
+                        txtStatus.Text = "Processing canceled.";
+                        break;
+                    }
+
                     txtStatus.Text = $"처리 중: {fileItem.FileName}";
                     
                     try
                     {
                         if (isConvertMode)
                         {
-                            await ProcessConvertFileAsync(fileItem, pageSize);
+                            await ProcessConvertFileAsync(fileItem, pageSize, generateRagJsonl);
                         }
                         else
                         {
-                            await ProcessFileAsync(fileItem, pageSize);
+                            await ProcessFileAsync(fileItem, pageSize, useContextSplit, contextOverlapPages, generateRagJsonl);
                         }
                         LogMessage($"파일 처리 완료: {fileItem.FileName}");
                     }
@@ -481,12 +683,45 @@ namespace PDFSplitterforCopilot
             }
             finally
             {
-                progressContainer.Visibility = Visibility.Collapsed;
-                btnProcess.IsEnabled = true;
+                SetProcessingUiState(0, false);
+                _processingCancellation?.Dispose();
+                _processingCancellation = null;
             }
         }
 
-        private async System.Threading.Tasks.Task ProcessFileAsync(FileItem fileItem, int pageSize)
+        private List<FileItem> GetSelectedFiles()
+        {
+            return fileItems.Where(f => f.IsSelected).ToList();
+        }
+
+        private static List<FileItem> GetProcessableFiles(IEnumerable<FileItem> selectedFiles)
+        {
+            return selectedFiles.Where(f => f.StatusColor == Brushes.Green || f.StatusColor == Brushes.Orange).ToList();
+        }
+
+        private static List<FileItem> GetInvalidFiles(IEnumerable<FileItem> selectedFiles, IEnumerable<FileItem> validFiles)
+        {
+            return selectedFiles.Except(validFiles).ToList();
+        }
+
+        private void SetProcessingUiState(int fileCount, bool isProcessing)
+        {
+            progressContainer.Visibility = isProcessing ? Visibility.Visible : Visibility.Collapsed;
+            progressBar.Maximum = Math.Max(fileCount, 1);
+            progressBar.Value = 0;
+            btnProcess.IsEnabled = !isProcessing;
+            btnCancel.Visibility = isProcessing ? Visibility.Visible : Visibility.Collapsed;
+            btnCancel.IsEnabled = isProcessing;
+        }
+
+        private void BtnCancel_Click(object sender, RoutedEventArgs e)
+        {
+            _processingCancellation?.Cancel();
+            btnCancel.IsEnabled = false;
+            txtStatus.Text = "Cancel requested. The current file step will finish first.";
+        }
+
+        private async System.Threading.Tasks.Task ProcessFileAsync(FileItem fileItem, int pageSize, bool useContextSplit, int contextOverlapPages, bool generateRagJsonl)
         {
             // 고정된 5단계 프로세스
             int totalSteps = 5;
@@ -583,7 +818,52 @@ namespace PDFSplitterforCopilot
                         fileItem.UpdateStep(currentStep, "PDF 분할 중...", StepStatus.InProgress);
                     });
                     
-                    SplitPdfFile(pdfPath, pageSize, fileItem, totalPages);
+                    if (useContextSplit)
+                    {
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            fileItem.UpdateStep(currentStep, "Requesting LLM context split proposal...", StepStatus.InProgress);
+                        });
+
+                        ContextSplitProposal proposal = ContextSplitService.CreateProposalAsync(pdfPath, pageSize).GetAwaiter().GetResult();
+                        bool confirmed = false;
+                        IReadOnlyList<ContextSplitRange> acceptedRanges = proposal.Ranges;
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            var dialog = new ContextSplitPreviewDialog(proposal, contextOverlapPages)
+                            {
+                                Owner = this
+                            };
+                            confirmed = dialog.ShowDialog() == true && dialog.IsConfirmed;
+                            if (confirmed)
+                            {
+                                acceptedRanges = dialog.AcceptedRanges;
+                            }
+                        });
+
+                        if (!confirmed)
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                fileItem.UpdateStep(currentStep, "Context split canceled before writing files.", StepStatus.Completed);
+                            });
+                            return;
+                        }
+
+                        List<string> generatedOutputs = SplitPdfFile(pdfPath, acceptedRanges, fileItem, totalPages, generateRagJsonl);
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            fileItem.SetGeneratedOutputs(generatedOutputs);
+                        });
+                    }
+                    else
+                    {
+                        List<string> generatedOutputs = SplitPdfFile(pdfPath, pageSize, fileItem, totalPages, generateRagJsonl);
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            fileItem.SetGeneratedOutputs(generatedOutputs);
+                        });
+                    }
                     
                     Application.Current.Dispatcher.Invoke(() =>
                     {
@@ -606,11 +886,13 @@ namespace PDFSplitterforCopilot
                     throw;
                 }
             });
-        }        private void SplitPdfFile(string pdfPath, int pageSize, FileItem fileItem, int totalPages)
-        {            using (var reader = new PdfReader(pdfPath))
+        }        private List<string> SplitPdfFile(string pdfPath, int pageSize, FileItem fileItem, int totalPages, bool generateRagJsonl)
+        {
+            var outputPaths = new List<string>();
+            using (var reader = new PdfReader(pdfPath))
             using (var pdfDoc = new iText.Kernel.Pdf.PdfDocument(reader))
             {
-                string outputDir = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(pdfPath) ?? "", "output_split");
+                string outputDir = OutputFileService.GetOutputDirectory(pdfPath);
                 
                 if (!Directory.Exists(outputDir))
                 {
@@ -621,16 +903,26 @@ namespace PDFSplitterforCopilot
                 {
                     int endPage = Math.Min(startPage + pageSize - 1, totalPages);
                     
-                    string outputFileName = $"{System.IO.Path.GetFileNameWithoutExtension(pdfPath)}_page{startPage:D2}-{endPage:D2}.pdf";
-                    string outputFilePath = System.IO.Path.Combine(outputDir, outputFileName);
+                    string outputFilePath = OutputFileService.GetFixedSplitOutputPath(pdfPath, startPage, endPage);
                     
                     using (var writer = new iText.Kernel.Pdf.PdfWriter(outputFilePath))
                     using (var newPdfDoc = new iText.Kernel.Pdf.PdfDocument(writer))
                     {
                         pdfDoc.CopyPagesTo(startPage, endPage, newPdfDoc);
                     }
+
+                    outputPaths.Add(outputFilePath);
+                }
+
+                if (generateRagJsonl)
+                {
+                    string chunkOutputPath = RagChunkExportService.ExportPdfChunks(pdfPath, outputDir);
+                    LogMessage($"RAG chunk JSONL generated: {chunkOutputPath}");
+                    outputPaths.Add(chunkOutputPath);
                 }
             }
+
+            return outputPaths;
         }
 
         /// <summary>
@@ -884,6 +1176,32 @@ namespace PDFSplitterforCopilot
             }
         }
 
+        private void MenuItem_OpenAISettings_Click(object sender, RoutedEventArgs e)
+        {
+            ShowOpenAISettingsDialog();
+        }
+
+        private bool EnsureOpenAISettings()
+        {
+            if (OpenAISettingsService.HasApiKey())
+            {
+                return true;
+            }
+
+            MessageBox.Show("Context Split (LLM) requires an OpenAI API key. Enter it in the next dialog to continue.", "OpenAI API Settings", MessageBoxButton.OK, MessageBoxImage.Information);
+            return ShowOpenAISettingsDialog() && OpenAISettingsService.HasApiKey();
+        }
+
+        private bool ShowOpenAISettingsDialog()
+        {
+            var dialog = new OpenAIApiSettingsDialog
+            {
+                Owner = this
+            };
+
+            return dialog.ShowDialog() == true;
+        }
+
         private void UpdateFontSizeMenuItems(double currentFontSize)
         {
             // 메뉴 찾기 - Grid에서 Menu 찾기
@@ -935,7 +1253,7 @@ namespace PDFSplitterforCopilot
         /// </summary>
         /// <param name="fileItem">처리할 파일 아이템</param>
         /// <param name="pageLimit">추출할 페이지 수</param>
-        private async System.Threading.Tasks.Task ProcessConvertFileAsync(FileItem fileItem, int pageLimit)
+        private async System.Threading.Tasks.Task ProcessConvertFileAsync(FileItem fileItem, int pageLimit, bool generateRagJsonl)
         {
             // 고정된 4단계 프로세스 (변환/추출용)
             int totalSteps = 4;
@@ -1027,7 +1345,8 @@ namespace PDFSplitterforCopilot
                         });
                         
                         LogMessage($"페이지 추출 시작: {pdfPath}, 제한: {pageLimit}");
-                        int extractedPages = ExtractPdfPagesWithResult(pdfPath, pageLimit);
+                        int extractedPages = ExtractPdfPagesWithResult(pdfPath, pageLimit, generateRagJsonl);
+                        List<string> generatedOutputs = GetExtractionOutputPaths(pdfPath, extractedPages, generateRagJsonl);
                         LogMessage($"페이지 추출 완료: {extractedPages}페이지");
                         
                         Application.Current.Dispatcher.Invoke(() =>
@@ -1073,7 +1392,7 @@ namespace PDFSplitterforCopilot
         /// <param name="pdfPath">원본 PDF 파일 경로</param>
         /// <param name="pageLimit">분리할 페이지 수 (1부터 이 숫자까지)</param>
         /// <returns>실제로 분리된 페이지 수</returns>
-        private int ExtractPdfPagesWithResult(string pdfPath, int pageLimit)
+        private int ExtractPdfPagesWithResult(string pdfPath, int pageLimit, bool generateRagJsonl)
         {
             try
             {
@@ -1087,7 +1406,7 @@ namespace PDFSplitterforCopilot
                     
                     LogMessage($"총 페이지: {totalPages}, 추출할 페이지: {extractPages}");
                     
-                    string outputDir = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(pdfPath) ?? "", "output_split");
+                    string outputDir = OutputFileService.GetOutputDirectory(pdfPath);
                     
                     LogMessage($"출력 디렉토리: {outputDir}");
                     
@@ -1097,8 +1416,7 @@ namespace PDFSplitterforCopilot
                         LogMessage($"출력 디렉토리 생성됨: {outputDir}");
                     }
                     
-                    string outputFileName = $"{System.IO.Path.GetFileNameWithoutExtension(pdfPath)}_page01-{extractPages:D2}.pdf";
-                    string outputFilePath = System.IO.Path.Combine(outputDir, outputFileName);
+                    string outputFilePath = OutputFileService.GetExtractedPdfOutputPath(pdfPath, extractPages);
                     
                     LogMessage($"출력 파일 경로: {outputFilePath}");
                     
@@ -1129,6 +1447,12 @@ namespace PDFSplitterforCopilot
                     }
                     
                     LogMessage($"ExtractPdfPagesWithResult 완료 - 반환값: {extractPages}");
+                    if (generateRagJsonl)
+                    {
+                        string chunkOutputPath = RagChunkExportService.ExportPdfChunks(pdfPath, outputDir, 1, extractPages);
+                        LogMessage($"RAG chunk JSONL generated: {chunkOutputPath}");
+                    }
+
                     return extractPages;
                 }
             }
@@ -1137,6 +1461,21 @@ namespace PDFSplitterforCopilot
                 LogMessage($"ExtractPdfPagesWithResult 오류 - PDF: {pdfPath}", ex, "ERROR");
                 throw;
             }
+        }
+
+        private static List<string> GetExtractionOutputPaths(string pdfPath, int extractedPages, bool generateRagJsonl)
+        {
+            var outputPaths = new List<string>
+            {
+                OutputFileService.GetExtractedPdfOutputPath(pdfPath, extractedPages)
+            };
+
+            if (generateRagJsonl)
+            {
+                outputPaths.Add(OutputFileService.GetRagJsonlOutputPath(pdfPath));
+            }
+
+            return outputPaths;
         }
 
         #endregion
@@ -1251,6 +1590,41 @@ namespace PDFSplitterforCopilot
             }
         }
 
+        private void OutputSummary_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (sender is not TextBlock { Tag: FileItem fileItem })
+            {
+                return;
+            }
+
+            if (fileItem.GeneratedOutputPaths.Count == 0)
+            {
+                MessageBox.Show("No output files have been generated for this row yet.", "Output files", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            string message = string.Join(Environment.NewLine, fileItem.GeneratedOutputPaths);
+            var result = MessageBox.Show(
+                $"Generated output files:{Environment.NewLine}{Environment.NewLine}{message}{Environment.NewLine}{Environment.NewLine}Open the output folder?",
+                "Output files",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Information);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                string firstOutput = fileItem.GeneratedOutputPaths.First();
+                string? directoryPath = System.IO.Path.GetDirectoryName(firstOutput);
+                if (!string.IsNullOrWhiteSpace(directoryPath) && Directory.Exists(directoryPath))
+                {
+                    System.Diagnostics.Process.Start("explorer.exe", directoryPath);
+                }
+                else
+                {
+                    OpenOutputFolder(fileItem.FilePath);
+                }
+            }
+        }
+
         #endregion
 
         /// <summary>
@@ -1258,28 +1632,7 @@ namespace PDFSplitterforCopilot
         /// </summary>
         private void TbModeSwitch_Click(object sender, RoutedEventArgs e)
         {
-            // 토글 전의 모드 상태를 기준으로 현재 페이지 수를 저장
-            // 주의: 클릭 이벤트 시점에서는 아직 IsChecked 값이 토글되기 전 상태임
-            bool wasConvertMode = tbModeSwitch.IsChecked == false; // 토글 전 상태의 반대가 현재 모드
-            
-            // 현재 페이지 수를 이전 모드에 저장
-            if (int.TryParse(numPageCount.Text, out int currentPageCount))
-            {
-                if (wasConvertMode)
-                {
-                    _convertModePageCount = currentPageCount;
-                }
-                else
-                {
-                    _splitModePageCount = currentPageCount;
-                }
-            }
-            
-            // 새로운 모드의 페이지 수 복원 (토글 후 상태)
-            RestoreModePageCount();
-            
-            // 실행 버튼 텍스트 업데이트
-            UpdateProcessButtonText();
+            CbOperation_SelectionChanged(sender, new SelectionChangedEventArgs(Selector.SelectionChangedEvent, new List<object>(), new List<object>()));
         }
 
         /// <summary>
@@ -1287,10 +1640,18 @@ namespace PDFSplitterforCopilot
         /// </summary>
         private void SaveCurrentPageCount()
         {
-            bool isConvertMode = tbModeSwitch.IsChecked == true;
-            if (isConvertMode)
+            SavePageCountForOperation(cbOperation?.SelectedIndex ?? 0);
+        }
+
+        private void SavePageCountForOperation(int operationIndex)
+        {
+            if (operationIndex == 2)
             {
-                // 변환 모드인 경우
+                return;
+            }
+
+            if (operationIndex == 1)
+            {
                 if (int.TryParse(numPageCount.Text, out int convertPageCount))
                 {
                     _convertModePageCount = convertPageCount;
@@ -1298,7 +1659,6 @@ namespace PDFSplitterforCopilot
             }
             else
             {
-                // 분할 모드인 경우
                 if (int.TryParse(numPageCount.Text, out int splitPageCount))
                 {
                     _splitModePageCount = splitPageCount;
@@ -1311,8 +1671,13 @@ namespace PDFSplitterforCopilot
         /// </summary>
         private void RestoreModePageCount()
         {
-            bool isConvertMode = tbModeSwitch.IsChecked == true;
-            numPageCount.Text = isConvertMode ? _convertModePageCount.ToString() : _splitModePageCount.ToString();
+            if (IsBatchConvertOperation())
+            {
+                numPageCount.Text = "All";
+                return;
+            }
+
+            numPageCount.Text = IsConvertOperation() ? _convertModePageCount.ToString() : _splitModePageCount.ToString();
         }
 
         /// <summary>
@@ -1418,17 +1783,17 @@ namespace PDFSplitterforCopilot
             _isBatchConvertMode = true;
             
             // 변환 모드로 토글
-            tbModeSwitch.IsChecked = true;
+            cbOperation.SelectedIndex = 2;
             
             // 모드 토글 버튼 비활성화 (일괄 변환 모드에서는 변환 모드 고정)
-            tbModeSwitch.IsEnabled = false;
+            cbOperation.IsEnabled = false;
             
             // 페이지 수 입력 비활성화
             numPageCount.IsEnabled = false;
             numPageCount.Text = "전체";
             
             // 실행 버튼 텍스트 업데이트
-            btnProcess.Content = "▶ 일괄 변환 실행";
+            btnProcess.Content = "Run batch conversion";
         }
 
         /// <summary>
@@ -1439,7 +1804,7 @@ namespace PDFSplitterforCopilot
             _isBatchConvertMode = false;
             
             // 모드 토글 버튼 활성화
-            tbModeSwitch.IsEnabled = true;
+            cbOperation.IsEnabled = true;
             
             // 페이지 수 입력 활성화
             numPageCount.IsEnabled = true;
@@ -1701,6 +2066,7 @@ namespace PDFSplitterforCopilot
                                 fileItem.Steps[3].Status = StepStatus.Completed;
                                 fileItem.Steps[3].Message = "변환 작업 완료";
                                 fileItem.StatusColor = Brushes.Green;
+                                fileItem.SetGeneratedOutputs(new[] { outputPath });
                                 fileItem.StatusMessage = "변환 완료";
                                 // 페이지 수 업데이트
                                 fileItem.PageCount = totalPages.ToString();

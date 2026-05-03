@@ -1,0 +1,80 @@
+<Window x:Class="PDFSplitterforCopilot.ContextSplitPreviewDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Context Split Preview"
+        Height="520"
+        Width="820"
+        MinHeight="420"
+        MinWidth="700"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Text="Review and edit LLM page ranges before files are created."
+                       FontSize="16"
+                       FontWeight="SemiBold"/>
+            <TextBlock Name="txtSummary"
+                       Margin="0,4,0,0"
+                       Foreground="#666666"/>
+            <TextBlock Name="txtValidation"
+                       Margin="0,6,0,0"
+                       Foreground="#A4262C"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <DataGrid Grid.Row="1"
+                  Name="dgRanges"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  IsReadOnly="False"
+                  SelectionMode="Single"
+                  HeadersVisibility="Column"
+                  CellEditEnding="DgRanges_CellEditEnding"
+                  RowEditEnding="DgRanges_RowEditEnding">
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="Background" Value="White"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasWarning}" Value="True">
+                            <Setter Property="Background" Value="#FFF4CE"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.RowStyle>
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Part" Binding="{Binding Part}" Width="60" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Title" Binding="{Binding Title, UpdateSourceTrigger=PropertyChanged}" Width="2*"/>
+                <DataGridTextColumn Header="Semantic" Binding="{Binding SemanticRange}" Width="96" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Start" Binding="{Binding StartPage, UpdateSourceTrigger=PropertyChanged}" Width="72"/>
+                <DataGridTextColumn Header="End" Binding="{Binding EndPage, UpdateSourceTrigger=PropertyChanged}" Width="72"/>
+                <DataGridTextColumn Header="Included" Binding="{Binding IncludedRange}" Width="96" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="3*"/>
+                <DataGridTextColumn Header="Confidence" Binding="{Binding ConfidenceText}" Width="110" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Output file" Binding="{Binding OutputFileName}" Width="2*" IsReadOnly="True"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,12,0,0">
+            <Button Content="Cancel"
+                    Width="96"
+                    Height="32"
+                    Margin="0,0,8,0"
+                    Click="Cancel_Click"/>
+            <Button Content="Create PDFs"
+                    Width="120"
+                    Height="32"
+                    IsDefault="True"
+                    Click="Create_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,12 +1,43 @@
+dotnet watch --project .\PDFSplitterforCopilot.csproj run
+
+
 # PDF Splitter for Copilot
 
 PDF 및 Word 파일을 지정된 페이지 단위로 분할하는 프로그램입니다. Copilot의 RAG 검색 정확성 향상을 위해 대용량 문서를 작은 단위로 분할할 수 있습니다.
 
 ![alt text](image.png)
 
+## First-run commercial workflow
+
+1. Start the app and choose a task from `Task`: `Split PDF`, `Convert Word`, or `Batch Convert Word`.
+2. Add files with `Add files` or drag PDF/Word files into the window.
+3. For normal splitting, use `Method = Fixed pages` and enter `Pages`.
+4. For LLM-based splitting, use `Method = Context Split (LLM)`. The app asks for OpenAI API settings if no key is configured, then shows an editable preview before any PDF files are written.
+5. For long-form documents, set `Overlap` to `1` or `2` in Context Split to duplicate boundary pages in adjacent output PDFs. The preview shows both semantic ranges and included ranges.
+6. Use `Advanced export: RAG JSONL` only when JSONL chunks are needed for a downstream RAG index.
+7. Click `Run`. During multi-file jobs, `Cancel` stops the workflow after the current file step finishes.
+8. After completion, use the `Output` column to review generated files and open the output folder.
+
+Operational notes:
+- OpenAI settings are managed from `Options > OpenAI API Settings...`.
+- User-saved OpenAI API keys are stored in the Windows user profile with current-user encryption.
+- Split outputs are written under an `output_split` folder next to the source file.
+- Context Split output files use short included-page names such as `sample_part02_p10-21.pdf`; semantic ranges are shown in the preview.
+- Developer `.env` fallback remains supported for local development.
+
 
 
 ## 🚀 주요 기능
+
+## ✅ Quality and CI
+
+- Test guideline: `docs/code-test-guideline.md`
+- Progress tracker: `docs/progress-tracker.md`
+- Verification log: `docs/test-log.md`
+- Lightweight CI: `.github/workflows/ci-lite.yml`
+- Manual deploy pipeline: `.github/workflows/copy-deploy.yml`
+- Manual EXE release pipeline: `.github/workflows/manual-release-single-file.yml`
+
 
 - **PDF 분할**: 대용량 PDF 파일을 지정된 페이지 단위로 자동 분할
 - **Word 변환**: Word 문서(.doc, .docx)를 PDF로 변환 후 분할 (Microsoft Office 불필요)
@@ -140,7 +171,6 @@ dotnet add package System.Drawing.Common --version 9.0.5
 
 ### 방법 1: BAT 파일 사용 (권장)
 프로젝트 폴더에서 다음 파일 중 하나를 실행:
-- `run.bat` - 프로젝트 빌드 후 실행
 - `publish.bat` - 최종 배포파일 생성을 위한 실행
 
 ### 방법 2: PowerShell 사용
@@ -149,13 +179,13 @@ dotnet add package System.Drawing.Common --version 9.0.5
 cd .\PDFSplitterforCopilot
 
 # 또는 직접 실행 파일 호출
-Invoke-Item ".\bin\Debug\net8.0-windows\PDFSplitterforCopilot.exe"
+Invoke-Item ".\bin\Debug\net9.0-windows\PDFSplitterforCopilot.exe"
 ```
 
 ### 방법 3: Visual Studio Code 작업 사용
 1. VS Code에서 프로젝트 열기
 2. Ctrl+Shift+B 누르기 (빌드 작업 실행)
-3. bin\Debug\net8.0-windows 폴더에서 PDFSplitterforCopilot.exe 실행
+3. bin\Debug\net9.0-windows 폴더에서 PDFSplitterforCopilot.exe 실행
 
 ## 배포
 
@@ -165,5 +195,69 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 
 ## -p:PublishTrimmed=false 옵션을 유지하면 exe 실행파일이 정상적으로 실행되지 않는 경우를 발견, csproj 파일에 추가됨.
 
-# 생성된 파일 위치: bin\Release\net8.0-windows\win-x64\publish\PDFSplitterforCopilot.exe
+# 생성된 파일 위치: bin\Release\net9.0-windows\win-x64\publish\PDFSplitterforCopilot.exe
 ```
+## Processing mode guide (Fast Split / RAG JSONL)
+
+Fast Split remains the default workflow. By default, the app only splits PDF/Word files into page-based PDF outputs and does not run embedding, LLM calls, or RAG chunk export.
+
+### 1) Fast Split (default)
+- Runs only the existing page-based PDF/Word split behavior.
+- Does not generate embeddings or call an LLM.
+- Keeps latency and operating cost low.
+
+### 2) RAG JSONL export (optional)
+- Enable the `RAG JSONL` checkbox to generate `{filename}_rag_chunks.jsonl` in `output_split`.
+- The JSONL export contains parent and child chunks, source page ranges, section path hints, retrieval policy hints, source file hash, chunk hash, and chunk policy version.
+- The export is intended for a downstream Smart RAG pipeline. Embedding generation, background queues, hybrid search, and reranking are not performed by the desktop splitter.
+
+### Operational notes
+- JSONL regeneration is skipped when `source_file_sha256`, `export_page_start`, `export_page_end`, and `chunk_policy_version` match the existing export.
+- Downstream indexing should use `chunk_hash` and `chunk_policy_version` to avoid duplicate embedding work.
+
+## Context Split (LLM)
+
+`Context Split (LLM)` keeps the existing page-copying split engine, but asks OpenAI to propose semantic page ranges before files are created.
+
+### Setup
+
+For regular app use, open `Options > OpenAI API Settings...` and save your OpenAI API key. The app stores it in the current Windows user profile at:
+
+```text
+%AppData%\PDFSplitterforCopilot\openai-settings.json
+```
+
+The API key is encrypted with the current Windows user scope. The model value is stored as plain text and defaults to `gpt-4o-mini`.
+
+For development, you can still set an OpenAI API key outside the repository:
+
+```powershell
+$env:OPENAI_API_KEY = "your_api_key"
+```
+
+Optionally choose a model:
+
+```powershell
+$env:OPENAI_CONTEXT_SPLIT_MODEL = "gpt-4o-mini"
+```
+
+You can also put these values in a local `.env` file in the project folder. `.env` is ignored by git and is used as a fallback after environment variables and saved app settings:
+
+```text
+OPENAI_API_KEY=your_api_key
+OPENAI_CONTEXT_SPLIT_MODEL=gpt-4o-mini
+```
+
+### Usage
+
+1. Add a PDF or Word file.
+2. Choose `Split PDF` from `Operation`.
+3. Choose `Context Split (LLM)` from `Method`.
+4. Enter the target number of pages per part.
+5. Click `Run context split`.
+6. Review the preview table (`part`, `title`, `page range`, `reason`, `confidence`).
+7. Confirm to create context-named PDFs in `output_split`, or cancel to write nothing.
+
+If no API key is configured, the app opens `OpenAI API Settings` automatically before requesting a context split.
+
+`Fixed pages` remains the default and does not require OpenAI.

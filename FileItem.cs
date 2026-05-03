@@ -1,5 +1,6 @@
 // FileItem.cs
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -20,6 +21,7 @@ namespace PDFSplitterforCopilot
         private string _stepMessage = "";
         private ObservableCollection<StepItem> _steps = new ObservableCollection<StepItem>();
         private double _blankPageRatio;
+        private ObservableCollection<string> _generatedOutputPaths = new ObservableCollection<string>();
 
         public FileItem()
         {
@@ -43,8 +45,26 @@ namespace PDFSplitterforCopilot
         public string StepMessage { get => _stepMessage; set { _stepMessage = value; OnPropertyChanged(nameof(StepMessage)); } }
         public ObservableCollection<StepItem> Steps { get => _steps; set { _steps = value; OnPropertyChanged(nameof(Steps)); } }
         public double BlankPageRatio { get => _blankPageRatio; set { _blankPageRatio = value; OnPropertyChanged(nameof(BlankPageRatio)); OnPropertyChanged(nameof(BlankPageRatioText)); } }
+        public ObservableCollection<string> GeneratedOutputPaths
+        {
+            get => _generatedOutputPaths;
+            set
+            {
+                _generatedOutputPaths = value;
+                OnPropertyChanged(nameof(GeneratedOutputPaths));
+                OnPropertyChanged(nameof(OutputSummary));
+                OnPropertyChanged(nameof(OutputTooltip));
+            }
+        }
 
         public string BlankPageRatioText => $"{BlankPageRatio:P1}";
+        public string OutputSummary => GeneratedOutputPaths.Count == 0 ? "" : $"{GeneratedOutputPaths.Count} output file(s)";
+        public string OutputTooltip => GeneratedOutputPaths.Count == 0 ? "No output files yet." : string.Join(Environment.NewLine, GeneratedOutputPaths);
+
+        public void SetGeneratedOutputs(IEnumerable<string> outputPaths)
+        {
+            GeneratedOutputPaths = new ObservableCollection<string>(outputPaths);
+        }
 
         public void UpdateStep(int stepIndex, string message, StepStatus status)
         {

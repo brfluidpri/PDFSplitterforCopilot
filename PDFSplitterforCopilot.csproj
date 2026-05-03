@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">  <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net9.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>asset\icon.ico</ApplicationIcon>
     <AssemblyTitle>PDF Splitter For Copilot</AssemblyTitle>
@@ -20,6 +20,8 @@
   <!-- CLI 테스트 파일 제외 -->
   <ItemGroup>
     <Compile Remove="TestWordToPdfLicense.cs" />
+    <Compile Remove="LicenseConfig.cs" />
+    <Compile Include="$(IntermediateOutputPath)LicenseConfig.g.cs" />
   </ItemGroup>
   
   <ItemGroup>
@@ -46,7 +48,7 @@
   
   <!-- 빌드 시 라이선스 키 임베드 (PowerShell 스크립트 사용) -->
   <Target Name="EmbedLicenseKey" BeforeTargets="CoreCompile">
-    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\EmbedLicense.ps1&quot;" 
+    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\EmbedLicense.ps1&quot; -OutputFile &quot;$(IntermediateOutputPath)LicenseConfig.g.cs&quot;"
           ContinueOnError="true" 
           IgnoreExitCode="false" />
   </Target>

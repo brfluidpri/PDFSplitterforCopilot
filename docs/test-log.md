@@ -1,0 +1,153 @@
+# Test Log
+
+## 2026-05-03
+- Diagnosed `copy-deploy.yml` failure: `gh api repos/$SOURCE_REPOSITORY/releases/latest` returned HTTP 404 before any asset download, so the failure was not caused by the ~90 MB EXE size.
+- Reworked `copy-deploy.yml` to use manual release-style inputs (`tag_name`, `release_name`, `target_commitish`, `draft`, `prerelease`), publish the single-file EXE in the workflow, copy source files to the target repository, and upload the generated EXE directly to the target repository release asset.
+- `pwsh -NoProfile -Command '<parse copy-deploy.yml run blocks with System.Management.Automation.Language.Parser>'`: PASS (`PowerShell run blocks parsed: 9`)
+- `dotnet publish PDFSplitterforCopilot.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableWindowsTargeting=true -o .\publish\win-x64`: PASS after escalation
+- `git diff --check`: PASS (line-ending warnings only)
+- Fixed GitHub Actions SDK resolution for `manual-release-single-file.yml`: `global.json` now requests .NET SDK `9.0.312` with `latestFeature` roll-forward, and CI/release workflows install `9.0.312` instead of `10.0.x`.
+- Updated restore commands in CI and manual release workflows to include `-r win-x64`, matching the Release `RuntimeIdentifier`.
+- `dotnet --version`: PASS (`9.0.313` selected locally through `global.json` roll-forward from `9.0.312`)
+- `dotnet restore PDFSplitterforCopilot.sln`: BLOCKED in sandbox (`Access to the path 'C:\Users\b660\AppData\Local\Microsoft SDKs' is denied`)
+- `dotnet restore PDFSplitterforCopilot.sln`: PASS after escalation
+- `dotnet build PDFSplitterforCopilot.sln -c Release --no-restore`: FAIL before RID restore (`NETSDK1047`; assets file had no `net9.0-windows/win-x64` target)
+- `dotnet restore PDFSplitterforCopilot.sln -r win-x64`: PASS after escalation
+- `dotnet build PDFSplitterforCopilot.sln -c Release --no-restore`: PASS after RID restore (`0 warnings`, `0 errors`)
+- `dotnet publish PDFSplitterforCopilot.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableWindowsTargeting=true -o .\publish\win-x64`: PASS after escalation
+- `Test-Path .\publish\win-x64\PDFSplitterforCopilot.exe`: PASS (`True`, 83996877 bytes)
+- `git diff --check`: PASS (line-ending warnings only)
+- Updated `.github/workflows/copy-deploy.yml` to download the source repository's GitHub latest release `.exe`, copy that asset into the target repository, and create or update the target repository release with the same tag, title, notes, prerelease flag, and asset.
+- `git diff --check`: PASS (line-ending warnings only)
+- `pwsh -NoProfile -Command '<parse copy-deploy.yml run blocks with System.Management.Automation.Language.Parser>'`: PASS (`PowerShell run blocks parsed: 5`)
+- `node -e "try { require('yaml'); console.log('yaml available') } catch (e) { console.log('yaml unavailable') }"`: PASS (`yaml unavailable`; no local YAML parser package available)
+- `gh release edit --help`: BLOCKED in sandbox (`Access is denied` reading `C:\Users\b660\AppData\Roaming\GitHub CLI\config.yml`)
+- Implemented Context Split boundary overlap: `Overlap` input appears only for `Context Split (LLM)`, preview shows semantic and included ranges, context PDFs are copied from included ranges, and output names use short `{basename}_partNN_pXX-YY.pdf` format.
+- `dotnet build PDFSplitterforCopilot.csproj -c Release`: PASS after escalation (`bin\Release\net9.0-windows\win-x64\PDFSplitterforCopilot.dll`, `0 warnings`, `0 errors`)
+- `git diff --check`: PASS (line-ending warnings only)
+- Implemented Commercial UX Phases 2-6: editable Context Split preview with range validation, generated output tracking and output column, `OutputFileService`, cancel control for multi-file runs, and README first-run workflow notes.
+- `dotnet build PDFSplitterforCopilot.csproj -c Release`: FAIL (`ContextSplitPreviewDialog.xaml.cs` missing `System.Collections.Generic` for `IReadOnlyList<>`)
+- `dotnet build PDFSplitterforCopilot.csproj -c Release`: PASS after adding the missing namespace import (`bin\Release\net9.0-windows\win-x64\PDFSplitterforCopilot.dll`, `0 warnings`, `0 errors`)
+- `git diff --check`: PASS (line-ending warnings only)
+- Final `dotnet build PDFSplitterforCopilot.csproj -c Release`: BLOCKED in sandbox (`Access to the path 'C:\Users\b660\AppData\Local\Microsoft SDKs' is denied`)
+- Final `dotnet build PDFSplitterforCopilot.csproj -c Release`: PASS after escalation (`bin\Release\net9.0-windows\win-x64\PDFSplitterforCopilot.dll`, `0 warnings`, `0 errors`)
+- Implemented Commercial UX Phase 1: grouped the top workspace into file actions, task/method/page settings, advanced RAG JSONL export, and a fixed right-side primary run action while preserving the central `DataGrid` as the dominant surface.
+- Clarified operation-specific helper text and labels for fixed split, context split target pages, conversion, batch conversion, and advanced RAG JSONL export.
+- Split first-level processing helpers in `MainWindow.xaml.cs` for selected-file lookup, processable-file filtering, invalid-file filtering, and processing UI state.
+- `dotnet build PDFSplitterforCopilot.csproj -c Release`: BLOCKED in sandbox (`Access to the path 'C:\Users\b660\AppData\Local\Microsoft SDKs' is denied`)
+- `dotnet build PDFSplitterforCopilot.csproj -c Release`: PASS after escalation (`bin\Release\net9.0-windows\win-x64\PDFSplitterforCopilot.dll`, `0 warnings`, `0 errors`)
+- `git diff --check`: PASS (line-ending warnings only)
+- Updated `PDFSplitterforCopilot.csproj` target framework from `net8.0-windows` to `net9.0-windows`.
+- Added `global.json` to select .NET SDK `9.0.313` with `latestFeature` roll-forward.
+- `dotnet --version`: PASS (`9.0.313`)
+- `dotnet build PDFSplitterforCopilot.csproj`: BLOCKED in sandbox (`UnauthorizedAccessException` writing `.dotnet\9.0.313.toolpath.sentinel`)
+- `dotnet build PDFSplitterforCopilot.csproj`: PASS after escalation (`bin\Debug\net9.0-windows\PDFSplitterforCopilot.dll`, `0 warnings`, `0 errors`)
+
+## 2026-04-30
+- `git diff --check`: PASS
+- `dotnet restore PDFSplitterforCopilot.sln`: BLOCKED (`dotnet: command not found`)
+- `dotnet build PDFSplitterforCopilot.sln -c Release --no-restore`: BLOCKED (`dotnet: command not found`)
+
+## 2026-05-01
+- `git diff --check`: PASS
+
+## 2026-05-02
+- Increased `OpenAI API Settings` dialog size and made it resizable; wrapped the input area in a scroll viewer so API key/model fields and action buttons remain visible with larger fonts or DPI.
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: BLOCKED in sandbox (`UnauthorizedAccessException` writing .NET first-run sentinel)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: PASS after escalation (`0 warnings, 0 errors`)
+- Implemented OpenAI API settings UX: `Options > OpenAI API Settings...`, current-user encrypted API key storage in `%AppData%\PDFSplitterforCopilot\openai-settings.json`, saved model setting, environment/user-config/`.env` precedence, and automatic settings prompt before Context Split when no key is configured.
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: BLOCKED in sandbox (`UnauthorizedAccessException` writing .NET first-run sentinel)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: PASS after escalation (`0 warnings, 0 errors`)
+- Adjusted toolbar ComboBox text alignment: selected text and dropdown items are left-aligned horizontally while remaining vertically centered.
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: BLOCKED in sandbox (`UnauthorizedAccessException` writing .NET first-run sentinel)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: PASS after escalation (`0 warnings, 0 errors`)
+- Adjusted toolbar ComboBox styling for `Operation` and `Method`: centered selected/dropdown text, reduced item padding, and narrowed control widths to fit the displayed labels better.
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: BLOCKED in sandbox (`UnauthorizedAccessException` writing .NET first-run sentinel)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: PASS after escalation (`0 warnings, 0 errors`)
+- Replaced the toolbar operation toggle and separate batch convert checkbox with one `Operation` ComboBox containing `Split PDF`, `Convert Word`, and `Batch Convert Word`; operation-specific controls are enabled or disabled from the selected operation.
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: BLOCKED in sandbox (`UnauthorizedAccessException` writing .NET first-run sentinel)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: PASS after escalation (`0 warnings, 0 errors`)
+- Converted the main UI to a data-first toolbar layout: removed the large header and fixed left settings panel, moved file/actions/workflow/output controls into a compact top toolbar, expanded `dgFiles` to the full central workspace, and kept the bottom status/progress bar compact.
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: BLOCKED in sandbox (`UnauthorizedAccessException` writing .NET first-run sentinel)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: PASS after escalation (`0 warnings, 0 errors`)
+- `git diff --check`: PASS (line-ending warnings only)
+- Fixed PDF processing crash where background split/conversion workers read `cbGenerateRagJsonl.IsChecked` directly from a non-UI thread. The checkbox value is now captured on the UI thread before processing and passed as a plain bool through split/export methods.
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: BLOCKED in sandbox (`UnauthorizedAccessException` writing .NET first-run sentinel)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: PASS after escalation (`0 warnings, 0 errors`)
+- Updated WPF UI-inspired layout follow-up: `Split mode` changes now refresh the primary action text, and the batch conversion button label uses the same plain action style as the rest of the new layout.
+- Updated `docs/implementation-plan.md` layout cleanup matrix to `Done`; no `docs/issue-tracker.md` was created because `docs/progress-tracker.md` is the repository tracker source of truth.
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: BLOCKED in sandbox (`UnauthorizedAccessException` writing .NET first-run sentinel)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: PASS after escalation (`0 warnings, 0 errors`)
+- `git diff --check`: PASS (line-ending warnings only)
+- Implemented WPF UI-inspired layout cleanup: compact header, left workflow/settings panel, grouped output options, main file list area, and bottom status/progress area. No new tracker document was created because `docs/progress-tracker.md` is the project issue/progress source of truth.
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: BLOCKED in sandbox (`UnauthorizedAccessException` writing .NET first-run sentinel)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: PASS after escalation (`0 warnings, 0 errors`)
+- Implemented `Context Split (LLM)` phase 1: `Split mode` UI selector, OpenAI structured page-range proposal service, preview confirmation dialog, and context-named PDF output after confirmation.
+- Added local `.env` loading for `OPENAI_API_KEY` and optional `OPENAI_CONTEXT_SPLIT_MODEL`; `.env` is already ignored by git.
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: BLOCKED in sandbox (`UnauthorizedAccessException` writing .NET first-run sentinel)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: PASS after escalation (`0 warnings, 0 errors`)
+- OpenAI live API behavior: NOT RUN (requires user-provided `OPENAI_API_KEY`; missing key path is handled before any PDF outputs are written)
+- `git status --short --branch`: PASS (`codex-rag-chunk-jsonl...origin/codex-rag-chunk-jsonl`, clean before implementation-plan audit)
+- Reviewed `docs/implementation-plan.md` against repository files: PASS (AGENTS instructions, code test guideline, lightweight CI, README quality links, Fast Split/RAG JSONL documentation, RAG JSONL UI/service, incremental JSONL export, and manual single-file release workflow present)
+- `rg` implementation scan for RAG JSONL metadata and incremental keys: PASS (`cbGenerateRagJsonl`, `ExportPdfChunks`, `source_file_sha256`, `chunk_policy_version`, `export_page_start`, `export_page_end`, `parent_id`, `chunk_hash`, `section_path`, `retrieval_policy`, and `overlap_ratio` found)
+- `rg` implementation scan for manual release workflow inputs and publish settings: PASS (`workflow_dispatch`, `tag_name`, `release_name`, `target_commitish`, `draft`, `prerelease`, `SYNCFUSION_KEY`, `win-x64`, `PublishSingleFile`, and `action-gh-release` found)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: BLOCKED in sandbox (`UnauthorizedAccessException` writing .NET first-run sentinel)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: PASS after escalation (`0 warnings, 0 errors`)
+- `git diff --check`: PASS (line-ending warnings only)
+- `dotnet publish PDFSplitterforCopilot.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableWindowsTargeting=true -o .\publish\win-x64`: PASS after escalation; generated `publish\win-x64\PDFSplitterforCopilot.exe`
+- `Test-Path .\publish\win-x64\PDFSplitterforCopilot.exe`: PASS (`True`, 92210716 bytes)
+- `git status --short --branch`: PASS (`main...origin/main`, clean before changes)
+- `git switch work/automation-implementation`: BLOCKED (`fatal: invalid reference`)
+- `git switch -c work/automation-implementation`: BLOCKED (Git could not create nested ref directory)
+- `git switch -c codex/rag-chunk-jsonl`: BLOCKED (Git could not create nested ref directory)
+- `git switch -c codex-rag-chunk-jsonl`: PASS after escalation for `.git` write permission
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: BLOCKED in sandbox (`UnauthorizedAccessException` writing .NET first-run sentinel)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: FAIL after escalation on first run (`LicenseConfig` generated after item evaluation; stale compile plus misplaced patch errors)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: PASS on rerun after fixing misplaced patch and after `LicenseConfig.cs` existed (`0 warnings, 0 errors`)
+- `git diff --check`: PASS (line-ending warnings only)
+- `git status --short --branch`: PASS (`codex-rag-chunk-jsonl...origin/codex-rag-chunk-jsonl`, existing doc changes present before this cleanup)
+- `rg` conflict marker scan for docs and README: PASS (no conflict markers after cleanup)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: BLOCKED in sandbox (`UnauthorizedAccessException` writing .NET first-run sentinel)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: PASS after escalation (`0 warnings, 0 errors`)
+- `git diff --check`: FAIL (`MainWindow.xaml:321: trailing whitespace`)
+- `git diff --check`: PASS (line-ending warnings only)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: PASS after whitespace cleanup (`0 warnings, 0 errors`)
+- `git status --short --branch`: PASS (`codex-rag-chunk-jsonl...origin/codex-rag-chunk-jsonl`, clean before manual release workflow changes)
+- `dotnet publish PDFSplitterforCopilot.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableWindowsTargeting=true -o .\publish\win-x64`: PASS after escalation; generated `publish\win-x64\PDFSplitterforCopilot.exe`
+- `Test-Path .\publish\win-x64\PDFSplitterforCopilot.exe`: PASS (`True`, 92210707 bytes)
+- `git diff --check`: PASS (line-ending warnings only)
+- GitHub Actions `manual-release-single-file`: FAIL (`CS0103: The name 'LicenseConfig' does not exist in the current context`)
+- `dotnet publish PDFSplitterforCopilot.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableWindowsTargeting=true -o .\publish\win-x64`: PASS after generating and compiling `obj\Release\net8.0-windows\win-x64\LicenseConfig.g.cs`
+- `git diff --check`: PASS (line-ending warnings only)
+- Reviewed `.github/workflows/copy-deploy.yml`: FOUND hard-coded Syncfusion license key and possible generated `LicenseConfig.cs` copy to target repository.
+- Updated `.github/workflows/copy-deploy.yml`: require `PAT_TOKEN` and `SYNCFUSION_LICENSE_KEY`, write `license.config` from secret, publish with current single-file options, and exclude `LicenseConfig.cs` from target copy.
+- `dotnet publish PDFSplitterforCopilot.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:IncludeNativeLibrariesForSelfExtract=true -o .\publish`: PASS; generated `publish\PDFSplitterforCopilot.exe`
+- `Test-Path .\publish\PDFSplitterforCopilot.exe`: PASS (`True`, 92210720 bytes)
+- `rg` scan of `.github/workflows/copy-deploy.yml` for previous license key and deployment-critical tokens: PASS (hard-coded license removed; required secret references present)
+- `actionlint -version`: BLOCKED (`actionlint` not installed)
+- YAML parse with `python`: BLOCKED (`python` not found in this shell environment)
+- `git diff --check`: PASS (line-ending warnings only)
+- GitHub Actions `manual-release-single-file`: FAIL again with old `LicenseConfig.cs file generated` output, indicating the workflow checked out `main` via default `target_commitish` instead of the branch containing the `LicenseConfig.g.cs` fix.
+- Updated `.github/workflows/manual-release-single-file.yml` to use the workflow branch (`github.ref_name`) when `target_commitish` is not provided, and to use the resolved target for both checkout and release tag creation.
+- `dotnet publish PDFSplitterforCopilot.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableWindowsTargeting=true -o .\publish\win-x64`: PASS; generated and compiled `obj\Release\net8.0-windows\win-x64\LicenseConfig.g.cs`
+- `git diff --check`: PASS (line-ending warnings only)
+- Compared `main` `EmbedLicense.ps1` and `main` `copy-deploy.yml`: `copy-deploy.yml` creates `license.config`, runs `EmbedLicense.ps1`, and verifies `LicenseConfig.cs` before publish.
+- Updated `.github/workflows/manual-release-single-file.yml` to run `EmbedLicense.ps1` and verify `LicenseConfig.cs` before restore/publish.
+- `powershell -ExecutionPolicy Bypass -File .\EmbedLicense.ps1`: PASS (`LicenseConfig.cs file generated`)
+- `dotnet publish PDFSplitterforCopilot.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableWindowsTargeting=true -o .\publish\win-x64`: PASS
+- `git diff --check`: PASS (line-ending warnings only)
+- `dotnet --list-sdks`: PASS (local SDKs available: `8.0.319`, `10.0.102`; default SDK `10.0.102`)
+- `dotnet publish PDFSplitterforCopilot.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableWindowsTargeting=true -o .\publish\win-x64`: PASS using local .NET 10 SDK with `license.config`; generated `publish\win-x64\PDFSplitterforCopilot.exe`
+- Updated GitHub Actions workflows to use `dotnet-version: "10.0.x"`/`'10.0.x'`; release workflows fail early when `SYNCFUSION_KEY` is missing because `license.config` is required for Syncfusion PDF libraries.
+- `Test-Path .\publish\win-x64\PDFSplitterforCopilot.exe`: PASS (`True`, 92210707 bytes)
+- Manual review of `.github/workflows/manual-release-single-file.yml`: PASS (`dotnet-version: "10.0.x"`, `SYNCFUSION_KEY` creates `license.config`, and `EmbedLicense.ps1` runs before publish)
+- `dotnet --version`: PASS (`10.0.102`)
+- `dotnet publish PDFSplitterforCopilot.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableWindowsTargeting=true -o .\publish\win-x64`: PASS with .NET 10 SDK and `license.config`
+- `git diff --check`: PASS (line-ending warnings only)
+- `dotnet build PDFSplitterforCopilot.sln -c Release`: PASS with .NET 10 SDK and local `license.config` (`0 warnings, 0 errors`)
+- `dotnet publish PDFSplitterforCopilot.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableWindowsTargeting=true -o .\publish\win-x64`: PASS with .NET 10 SDK and local `license.config`
+- Updated release workflows to read the GitHub secret named `SYNCFUSION_KEY` and write it to `license.config`.
+- Removed obsolete `run.bat` developer helper script and deleted its current-use README reference.
+- Updated README debug/publish output paths from `net8.0-windows` to `net9.0-windows` where they described current app execution.
+- `rg -n --hidden --glob '!/.git/**' --glob '!bin/**' --glob '!obj/**' "run\\.bat|net8\\.0-windows" .`: PASS for README cleanup; remaining hits are historical logs/tracker entries, `.vscode\launch.json`, and `TestLicense.csproj`.
+- `git diff --check`: PASS (line-ending warning only for `docs/progress-tracker.md`).
