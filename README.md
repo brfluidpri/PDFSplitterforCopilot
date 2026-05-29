@@ -7,6 +7,9 @@ PDF 및 Word 파일을 지정된 페이지 단위로 분할하는 프로그램�
 
 ![alt text](image.png)
 
+<img width="669" height="445" alt="image" src="https://github.com/user-attachments/assets/68652776-96d4-4ce2-909c-1e16cf4cc116" />
+
+
 ## First-run commercial workflow
 
 1. Start the app and choose a task from `Task`: `Split PDF`, `Convert Word`, or `Batch Convert Word`.
